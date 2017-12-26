@@ -1,0 +1,188 @@
+
+package pkg3desapp;
+
+import java.io.FileReader;
+import java.util.regex.Pattern;
+
+public class DES {
+    
+    public static int BLOCK_SIZE  = 64; // 4 символа по 16 бит в блоке размером 64 бит
+    public static int CHAR_SIZE = 16; //количество бит в символе
+    
+    public static int COUNT_BLOCK_SYMBOLS = BLOCK_SIZE / CHAR_SIZE;
+    
+    public static String IP_FILE_PATH = "ip.txt";
+    public static String E_FILE_PATH = "e.txt";
+    public static String S_FILE_PATH = "s.txt";
+    
+    public String encrypt(String input)
+    {
+        String binaryInput = toRightLength(input);
+        binaryInput = toBinary(input);
+        String[] blocks = toBlocks(binaryInput);
+        for(int i=0;i<blocks.length;i++)
+        {
+            blocks[i] = IP(blocks[i]); //переставляем биты местами на основе таблицы IP
+            blocks[i] = feistelNetwork(blocks[i],""); //добавить ключ
+        }
+        
+        
+        
+        return binaryInput;
+    }
+    
+    public String toRightLength(String input)
+    {
+        while (input.length() % COUNT_BLOCK_SYMBOLS != 0)
+            input += "#";
+        return input;
+    }
+    
+    public String[] toBlocks(String binaryInput) //binaryInput правильной длины и в бинарном виде
+    {
+       String[] blocks = new String[binaryInput.length() / BLOCK_SIZE];
+       for(int i = 0; i < blocks.length; i++)
+            blocks[i] = binaryInput.substring(i * BLOCK_SIZE, BLOCK_SIZE);
+       return blocks;
+    }
+    
+    public String toBinary(String input)
+    {
+        String binaryOutput = "";
+        for(int i = 0; i < input.length();i++)
+        {
+            String binaryChar = Integer.toBinaryString(input.charAt(i));
+            while (binaryChar.length() < 16)
+                binaryChar = "0" + binaryChar;
+            binaryOutput += binaryChar;
+        }
+        System.out.print(binaryOutput);
+        return binaryOutput;
+    }
+    
+    public String IP(String input) //входная строка гарантировано имеет 64 символа
+    {
+        String output = "";
+        try
+        {
+            FileReader reader = new FileReader(IP_FILE_PATH);
+            String tempString = "";
+            int tempChar;
+            while((tempChar=reader.read())!=-1){
+                 tempString += (char)tempChar;
+            }
+            reader.close();
+            String[] order = Pattern.compile("[^\\d]+").split(tempString);
+            for(int i=0;i<order.length;i++)
+            {
+                output += input.charAt(Integer.parseInt(order[i]) - 1);
+            }
+        }
+        catch(Exception e){}
+        return output;
+    }
+    
+	public String XOR(String a,String b) // a и b одинаковой длины
+    {
+        String output = "";
+        for(int i=0;i<a.length();i++)
+        {
+            if(a.charAt(i) == b.charAt(i))
+                output += '0';
+            else output += '1';
+        }
+        return output;
+    }
+	
+    public String feistelNetwork(String input,String key)
+    {
+        String T = input;
+        for(int i = 0;i < 16;i++)
+        {
+            String L = T.substring(0,BLOCK_SIZE/2 - 1);
+            String R = T.substring(BLOCK_SIZE/2, BLOCK_SIZE - 1);
+            String roundKey = ""; // дописать
+            T = "";
+            T += R; //Ti = Li + Ri (Li = Ri-1)
+            R = XOR(L,feistelEncodingFunction(R,roundKey));
+            T += R;
+        }
+        return T;
+    }
+    
+    
+    
+    public String feistelEncodingFunction(String R,String roundKey)
+    {
+        String extendedR = E(R);
+        String fullB = XOR(extendedR,roundKey);
+        String[] B = new String[fullB.length()/6];
+        String shtrihB = "";
+        for(int i=0;i<fullB.length();i+=6)
+        {
+            B[i] = fullB.substring(i, i+6);
+            shtrihB += S(B[i],i);
+        }
+        return P(shtrihB);
+    }
+    
+    public String E(String R)
+    {
+        String extendedR = "";
+        try
+        {
+            FileReader reader = new FileReader(E_FILE_PATH);
+            String tempString = "";
+            int tempChar;
+            while((tempChar=reader.read())!=-1){
+                 tempString += (char)tempChar;
+            }
+            reader.close();
+            String[] order = Pattern.compile("[^\\d]+").split(tempString);
+            for(int i=0;i<order.length;i++)
+            {
+                extendedR += R.charAt(Integer.parseInt(order[i]) - 1);
+            }
+        }
+        catch(Exception e){}
+        return extendedR;
+    }
+    
+    public String S(String B,int i)
+    {
+        try
+        {
+            FileReader reader = new FileReader(S_FILE_PATH);
+            String tempString = "";
+            int tempChar;
+            while((tempChar=reader.read())!=-1){
+                 tempString += (char)tempChar;
+            }
+            reader.close();
+            String[] blocks = Pattern.compile("[*]{1}").split(tempString);
+            int m = Integer.parseInt((B.charAt(0) + B.charAt(B.length()-1)),2); // номер строки
+            int l = Integer.parseInt(B.substring(1,B.length()-1),2); //номер столбца
+            String[] tableValues = Pattern.compile("[^\\d]+").split(blocks[i]);
+            for(int j=0;j<tableValues.length;j++) System.out.println(tableValues[j]);
+            //int cipherDecimal = Integer.parseInt(t);
+            // доработать
+        }
+        catch(Exception e){}
+        return "";
+    }
+    
+    public String P(String shtrihB)
+    {
+        String output = "";
+        int[] tableP = {16,7,20,21,29,12,28,17,
+                         1,15,23,26,5,18,31,10,
+                         2,8,24,14,32,27,3,9,
+                         19,13,30,6,22,11,4,25};
+        for(int i=0;i<tableP.length;i++)
+        {
+            output += shtrihB.charAt(tableP[i] - 1);
+        }
+        return output;
+    }
+}
+

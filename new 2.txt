@@ -1,0 +1,286 @@
+package pkg3desapp;
+
+import java.io.FileReader;
+import java.util.regex.Pattern;
+import java.util.regex.*;
+import java.util.*;
+
+
+public class DES {
+    
+    public static int BLOCK_SIZE  = 64; // 4 символа по 16 бит в блоке размером 64 бит
+    public static int CHAR_SIZE = 16; //количество бит в символе
+    public static int COUNT_BLOCK_SYMBOLS = BLOCK_SIZE / CHAR_SIZE;
+    
+    public static String IP_FILE_PATH = "ip.txt";
+    public static String E_FILE_PATH = "e.txt";
+    public static String S_FILE_PATH = "s.txt";
+    
+    public String encrypt(String input,String key)
+    {
+        String output = "";
+        input = toRightLength(input); //приводим к длине, кратной длине блока
+        String binaryInput = toBinary(input); //переводим в двоичный вид
+        String[] blocks = toBlocks(binaryInput); //разбиваем на блоки
+        for(int i=0;i<blocks.length;i++) 
+        {
+            blocks[i] = IP(blocks[i]); //переставляем биты местами на основе таблицы IP
+            blocks[i] = feistelNetwork(blocks[i],key); //полученный блок запускаем в 16-раундовую сеть Фейстеля
+            blocks[i] = lastTransformation(blocks[i]);
+            output += binaryToString(blocks[i]);
+        }
+        return output;
+    }
+    
+    //////////подготовка строк к обработке,вводу и выводу//////////
+    
+     public String toRightLength(String input)
+    {
+        while (input.length() % COUNT_BLOCK_SYMBOLS != 0)
+            input += "#";
+        return input;
+    }
+     
+    public String[] toBlocks(String binaryInput) //binaryInput правильной длины и в бинарном виде
+    {
+       String[] blocks = new String[binaryInput.length() / BLOCK_SIZE];
+       for(int i = 0; i < blocks.length; i++)
+            blocks[i] = binaryInput.substring(i * BLOCK_SIZE, i * BLOCK_SIZE + BLOCK_SIZE);
+       return blocks;
+    }
+     
+    public String toBinary(String input)
+    {
+        String binaryOutput = "";
+        for(int i = 0; i < input.length();i++)
+        {
+            String binaryChar = Integer.toBinaryString(input.charAt(i));
+            while (binaryChar.length() < 16)
+                binaryChar = "0" + binaryChar;
+            binaryOutput += binaryChar;
+        }
+        return binaryOutput;
+    }
+    
+    public String binaryToString(String binaryInput) // в символе будет по 2 байта ,длина входа кратна 16
+    {
+        String output = "";
+        for(int i = 0;i<binaryInput.length();i+=16)
+        {
+            int number = 0;
+            String binaryNumber = binaryInput.substring(i,i+16);
+            for(int j = binaryNumber.length()-1;j>=0;j--)
+            {
+                int digit = binaryNumber.charAt(j) - '0';
+                number += digit * Math.pow(2,binaryNumber.length() - 1 - j);
+            }
+            output += (char)number;
+        }
+        return output;
+    }
+    
+    /////////***///////////
+    
+    //////////IP трансформация блоков//////////
+    
+    public String IP(String input) //входная строка гарантировано имеет 64 битовых символа
+    {
+        String output = "";
+        String fileContent = getFileContent(IP_FILE_PATH);
+        String[] order = Pattern.compile("[^\\d]+").split(fileContent);
+        for(int i=0;i<order.length;i++)
+          output += input.charAt(Integer.parseInt(order[i]) - 1);
+        return output;
+    }
+    
+    //////////***//////////
+
+    //////////Получение содержимого файла//////////
+
+    public String getFileContent(String path)
+    {
+        String output = "";
+        try
+        {
+            FileReader reader = new FileReader(path);
+            int tempChar;
+            while((tempChar=reader.read())!=-1){ output += (char)tempChar; }
+            reader.close();
+        }
+        catch(Exception e){}
+        return output;
+    }
+
+    //////////***//////////
+    
+    //////////работа с ключами/////////////
+    
+    public String generateRandomBinaryKey() // рандомный 64- битный ключ с битами четности (сумма битов в байте всегда нечетная)
+    {
+        String key = "";
+        Random rand = new Random();
+        int controlSum = 0;
+        for(int i=0;i<56;i++)
+        {
+            int randomNumber = rand.nextInt(2);
+            key += String.valueOf(randomNumber);
+            controlSum += randomNumber;
+            if( (i+1) % 7 == 0) 
+            {
+                if(controlSum % 2 == 0) key += '1';
+                else key += '0';
+                controlSum = 0;
+            }
+        }
+        return key;
+    }
+    
+    public String generateInitialRoundKey(String key)
+    {
+        int[] keyTable = {57,49,41,33,25,17,9,1,58,50,42,34,26,18,
+                          10,2,59,51,43,35,27,19,11,3,60,52,44,36,
+                          63,55,47,39,31,23,15,7,62,54,46,38,30,22,
+                          14,6,61,53,45,37,29,21,13,5,28,20,12,4};
+        String output = "";
+        for(int i=0;i<56;i++) output += key.charAt(keyTable[i]-1);
+        return output;
+    }
+
+    public String shift(String input,int shiftNumber,boolean direction) //true - налево, false - направо
+    {
+        if(direction) 
+            return input.substring(shiftNumber,input.length()) + input.substring(0,shiftNumber);
+        else
+            return input.substring(input.length() - shiftNumber, input.length()) + input.substring(0,input.length() - shiftNumber);
+    }
+    
+    public String transformRoundKey(String input)
+    {
+        String output = "";
+        int[] tableTransformRoundKey = {14,17,11,24,1,5,3,28,15,6,21,10,23,19,12,4,
+                                        26,8,16,7,27,20,13,2,41,52,31,37,47,55,30,40,
+                                        51,45,33,48,44,49,39,56,34,53,46,42,50,36,29,32};
+        for(int i=0;i<tableTransformRoundKey.length;i++)
+            output += input.charAt(tableTransformRoundKey[i]-1);
+        return output;
+    }
+    //////////***//////////
+    
+    //////////Сеть Фейстеля//////////
+    
+    public String feistelNetwork(String input,String key)
+    {
+        String T = input;
+        String initialKey = generateInitialRoundKey(key);
+        String C = initialKey.substring(0,28);
+        String D = initialKey.substring(28,56);
+        int[] shiftTable = {1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1};
+        for(int i = 0; i < 16;i++)
+        {
+            C = shift(C,shiftTable[i],true);
+            D = shift(D,shiftTable[i],true);
+            String roundKey = transformRoundKey(C+D);
+            T = feistelRound(T,roundKey);
+        }
+        return T;
+    }
+    
+    public String feistelRound(String T,String roundKey)
+    {
+        String L = T.substring(0,BLOCK_SIZE/2);
+        String R = T.substring(BLOCK_SIZE/2, BLOCK_SIZE);
+        String oldL = L;
+        L = R;
+        R = XOR(oldL,feistelEncodingFunction(R,roundKey));
+        return L + R;
+    }
+    
+    //////////Функция шифрования Фейстеля//////////
+    
+    public String feistelEncodingFunction(String R,String roundKey) // R - 32 бита, roundKey - 48 бит
+    {
+        String extendedR = E(R);
+        String fullB = XOR(extendedR,roundKey);
+        String[] B = new String[fullB.length()/6];
+        String shtrihB = "";
+        for(int i=0;i<B.length;i++)
+        {
+            B[i] = fullB.substring(i*6, i*6+6);
+            shtrihB += S(B[i],i);
+        }
+        return P(shtrihB);
+    }
+    
+    //////////***//////////
+    
+    //////////Вспомогательные методы преобразований для функции преобразования Фейстеля//////////
+    
+    public String E(String R)
+    {
+        String extendedR = "";
+        String fileContent = getFileContent(E_FILE_PATH);
+        String[] order = Pattern.compile("[^\\d]+").split(fileContent);
+        for(int i=0;i<order.length;i++)
+            extendedR += R.charAt(Integer.parseInt(order[i]) - 1);
+        return extendedR;
+    }
+    
+    public String XOR(String a,String b) // a и b одинаковой длины
+    {
+        String output = "";
+        for(int i=0;i<a.length();i++)
+        {
+            if(a.charAt(i) == b.charAt(i))
+                output += '0';
+            else output += '1';
+        }
+        return output;
+    }
+    
+    public String S(String B,int i)
+    {
+        String fileContent = getFileContent(S_FILE_PATH);
+        String[] values = Pattern.compile("[^\\d]+").split(fileContent);
+        int m = Integer.parseInt("" + B.charAt(0) + B.charAt(B.length()-1),2); // номер строки
+        int l = Integer.parseInt(B.substring(1,B.length()-1),2); //номер столбца
+        String shtrihB = Integer.toBinaryString(Integer.parseInt(values[i*64+m*16+l])); 
+        while(shtrihB.length() < 4) {shtrihB = "0" + shtrihB;}
+        return shtrihB;
+
+    }
+    
+    public String P(String shtrihB)
+    {
+        String output = "";
+        int[] tableP = {16,7,20,21,29,12,28,17,
+                         1,15,23,26,5,18,31,10,
+                         2,8,24,14,32,27,3,9,
+                         19,13,30,6,22,11,4,25};
+        for(int i=0;i<tableP.length;i++)
+            output += shtrihB.charAt(tableP[i] - 1);
+        return output;
+    }
+    
+    //////////***//////////
+    
+    //////////Конечная перестановка//////////
+    
+    public String lastTransformation(String T)
+    {
+        String output = "";
+        int[] tableIPReverse = new int[] {40,8,48,16,56,24,64,32,
+                                          39,7,47,15,55,23,63,31,
+                                          38,6,46,14,54,22,62,30,
+                                          37,5,45,13,53,21,61,29,
+                                          36,4,44,12,52,20,60,28,
+                                          35,3,43,11,51,19,59,27,
+                                          34,2,42,10,50,18,58,26,
+                                          33,1,41,9,49,17,57,25};
+        for(int i=0;i<tableIPReverse.length;i++)
+            output += T.charAt(tableIPReverse[i] - 1);
+        return output;
+    }
+    
+    //////////***//////////
+}
+
